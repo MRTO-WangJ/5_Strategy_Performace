@@ -12,8 +12,11 @@ warnings.filterwarnings('ignore')
 # 第二部分主要是投资策略编写以及收益序列的计算，包括因子投资、交叉线策略或着机器学习等。
 # 第三部分主要根据投资策略收益时间序列计算组合收益评价指标，并且用图表方式展现。
 
+# 功能：
 # 类支持月度调仓
 # 类库基于日度or月度数据
+# 策略支持多个数据一起输入，并自定义策略
+# 记录分组数据
 
 #################################################################################################################################
 # 底层数据适配层
@@ -190,13 +193,17 @@ class Varible_Calculate():
 #################################################################################################################################
 
 class Strategy():
-    def __init__(self,exclude,size,factor):
+    def __init__(self,exclude,size):
         self._exclude=exclude
         self._size=size
-        self._factor=factor
-        #
-        #self._groups_timelist=pd.DataFrame({})
+        self._groups_timelist=pd.DataFrame({})
 
+    # 加载因子数据
+    def load_factor(self,factor_list,factor_name):
+        self._factor_list = factor_list
+        self._factor_name = factor_name
+
+    # 加载收益
     def fit(self,ret,type='day'):
         if type=='day':
             ret['month']=ret.index.str[:7]
@@ -204,8 +211,9 @@ class Strategy():
             ret['month']=ret.index
         self._ret=ret
 
+    # 自定义策略部分
     def sort_group(self,df):
-        # 传入数据：df.columns=['exclude','size','factor']，df.index=['ticker']
+        # 传入数据：df.columns=['exclude','size','factor_name1']，df.index=['ticker']
         # 传出数据：[[tickers1],[tickers2],……]
         df=df.sort_values('factor').dropna()
         group1=list(df.iloc[:int(len(df)*0.3),:].index)
@@ -213,17 +221,21 @@ class Strategy():
         group_list=[group1,group2]
         return group_list
 
+    # 分组函数
     def _get_group(self,month):
-        df=pd.concat([self._exclude.loc[month],self._factor.loc[month]],axis=1)
-        df.columns=['exclude','factor']
+        factor_num=len(self._factor_list)
+        temp=[self._exclude.loc[month]]+[self._factor_list[i].loc[month] for i in range(factor_num)]
+        df=pd.concat(temp,axis=1)
+        df.columns=['exclude']+self._factor_name
         df=df[df['exclude']==1]
         if len(df)>11:
             #当期分组，若无则使用上期分组
             self._group_list=self.sort_group(df)
         # 保存分组时间序列
-        # groups_timelist=pd.DataFrame(self._group_list,columns=range(len(self._group_list)),index=[month])
-        # self._groups_timelist=pd.concat([self._groups_timelist,groups_timelist])
+        groups_timelist=pd.DataFrame(pd.Series(self._group_list,index=range(len(self._group_list))),columns=[month]).T
+        self._groups_timelist=pd.concat([self._groups_timelist,groups_timelist])
 
+    # 回测框架
     def get_portfolio_ret(self,group_name):
         group_num=len(group_name)
         month_list = self._ret['month'].sort_values().unique().tolist()
@@ -244,9 +256,13 @@ class Strategy():
                 rvw=pd.DataFrame(pvw.apply(lambda x:x.sum(),axis=1),columns=[i])
                 dfew.update(rew)
                 dfvw.update(rvw)
-        dfew.columns = group_name
-        dfvw.columns = group_name
-        return dfew,dfvw
+        dfew.columns = (pd.Series(group_name)+'_ew').tolist()
+        dfvw.columns = (pd.Series(group_name)+'_vw').tolist()
+        portfolio=pd.concat([dfew,dfvw],axis=1).astype(float)
+        #
+        group_tickers=self._groups_timelist
+        group_tickers.columns=group_name
+        return portfolio,group_tickers
 
 #################################################################################################################################
 # 图片列表展示部分
@@ -254,11 +270,7 @@ class Strategy():
 #################################################################################################################################
 
 class Performance():
-    def __init__(self,pew,pvw,path_ori,freq='day'):
-        pew,pvw=pew.copy(),pvw.copy()
-        pew.columns=pd.Series(pew.columns)+'_ew'
-        pvw.columns=pd.Series(pvw.columns)+'_vw'
-        portfolio=pd.concat([pew,pvw],axis=1).astype(float)
+    def __init__(self,portfolio,path_ori,freq='day'):
         # 设置调用接口对象导入FF因子数据
         self._csmAPI = Csmar_Api(path_ori=path_ori)
         self.freq=freq

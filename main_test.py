@@ -11,10 +11,11 @@ YMshare=var_calc.calc_YMshare(min_month=15,min_year=120)
 STshare=var_calc.calc_STshare()
 exclude=Listshare*YMshare*STshare
 # 构造策略
-strategy=imbt.Strategy(exclude,size,size)
+strategy=imbt.Strategy(exclude,size)
+strategy.load_factor(factor_list=[size],factor_name=['factor'])
 strategy.fit(ret,type=freq)
-pew,pvw=strategy.get_portfolio_ret(group_name=['size30','size70'])
+portfolio,group_tickers=strategy.get_portfolio_ret(group_name=['size30','size70'])
 # 策略展示
-performance=imbt.Performance(pew,pvw,path_ori='测试数据',freq=freq)
+performance=imbt.Performance(portfolio,path_ori='测试数据',freq=freq)
 perf=performance.performance_valuation()
 performance.plot_exNetValue()
