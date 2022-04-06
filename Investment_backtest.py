@@ -190,12 +190,20 @@ class Varible_Calculate():
 # 基础输入变量包括有exclude,ret,size和factor
 # 可以提供月调仓的日频和月频收益时间序列，可以自行定义交易策略，构造不同数量的投资组合
 # 策略思路：在每月换仓时获取不同投资组合的tickers组成由此计算组合收益，但是目前仅支持factor因子分组，可以优化使得自行加载外部数据和更广义的自定义策略
+
+# 注意事项：
+# 1. exclude是指要被剔除观测值为1，否则为0
+# 2. 支持外部已整理好的数据，如不需要exclude则可以通过no_exclude剔除
+# 2. 以收益数据的时间作为index，需要在导入数据之前更改收益数据时间，确保收益数据时间<=因子和权重时间
 #################################################################################################################################
 
 class Strategy():
-    def __init__(self,exclude,size):
-        self._exclude=exclude
-        self._size=size
+    def __init__(self,exclude,size,no_exclude=False):
+        self._size = size
+        if no_exclude:
+            self._exclude=(~size.isna()).astype(int)
+        else:
+            self._exclude=exclude
         self._groups_timelist=pd.DataFrame({})
 
     # 加载因子数据
@@ -256,8 +264,8 @@ class Strategy():
                 rvw=pd.DataFrame(pvw.apply(lambda x:x.sum(),axis=1),columns=[i])
                 dfew.update(rew)
                 dfvw.update(rvw)
-        dfew.columns = (pd.Series(group_name)+'_ew').tolist()
-        dfvw.columns = (pd.Series(group_name)+'_vw').tolist()
+        dfew.columns = ('ew_'+pd.Series(group_name)).tolist()
+        dfvw.columns = ('vw_'+pd.Series(group_name)).tolist()
         portfolio=pd.concat([dfew,dfvw],axis=1).astype(float)
         #
         group_tickers=self._groups_timelist
@@ -267,6 +275,9 @@ class Strategy():
 #################################################################################################################################
 # 图片列表展示部分
 # 基础输入变量可分为日度和月度，index表示时间，columns表示组合名称，valus表示组合收益*100
+
+# 注意事项：
+# 1. 只需要在指定数据目录下有STK_MKT_FIVEFACDAY.csv 或者 STK_MKT_FIVEFACMONTH.csv即可调用Performance类
 #################################################################################################################################
 
 class Performance():
